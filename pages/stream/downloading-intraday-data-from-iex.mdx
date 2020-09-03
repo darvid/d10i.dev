@@ -1,0 +1,84 @@
+---
+title: 'Download historic intraday OHLC data from IEX'
+publishedAt: '2020-09-02'
+summary: 'Quick and dirty script ideal for backtesting specific dates and symbols.'
+tags: ['python', 'backtrader']
+---
+
+This script provides a simple way to download historical intraday OHLC
+from [IEX Cloud][1] for the given symbol and date. If you need to download
+all symbols, check out [this article][2] from [Towards Data Science][3].
+
+The output format is JSON, and a datetime field is added for [Backtrader][4]
+compatibility. See below for an example snippet of importing the data into
+Backtrader.
+
+## Usage
+
+### Downloading data
+
+```shell
+export IEX_TOKEN="<secret token from IEX cloud>"
+pip install iexfinance  # if you don't already have the IEX SDK
+python get_iex_historical_intraday.py TSLA 2020-09-01
+# Wrote historical data to TSLA-2020-09-01.json
+```
+
+### Loading into backtrader
+
+```python
+import pandas
+import backtrader as bt
+
+cerebro = bt.Cerebro()
+...
+pandas_data = pandas.read_json(
+    'TSLA-2020-09-01.json', convert_dates=['datetime']
+)
+pandas_data = pandas_data.fillna(method='ffill')
+tsla_intraday = bt.feeds.PandasData(
+    dataname=pandas_data,
+    datetime='datetime',
+    openinterest=None,
+    timeframe=bt.TimeFrame.Minutes,
+)
+cerebro.adddata(tsla_intraday)
+```
+
+## Source
+
+```python:get_iex_historical_intraday.py
+#!/usr/bin/env python3
+import datetime
+import json
+import sys
+
+import iexfinance.stocks
+
+
+def main(args):
+    """Download historical intraday data from IEX for the given symbol."""
+    if len(args) != 2:
+        print(f'usage: {sys.argv[0]} [symbol] [YYYY-mm-dd]')
+        sys.exit(1)
+    symbol, datestring = args
+    date = datetime.datetime.strptime(datestring, '%Y-%m-%d')
+    intraday_json = iexfinance.stocks.get_historical_intraday(
+        symbol.upper(), date, output_format='json'
+    )
+    for tick in intraday_json:
+        tick['datetime'] = f'{tick["date"]} {tick["minute"]}'
+    output_filename = f'{symbol}-{date.strftime("%Y-%m-%d")}.json'
+    json.dump(intraday_json, open(output_filename, 'w'))
+    print(f'Wrote historical data to {output_filename}')
+
+
+if __name__ == '__main__':
+    main(sys.argv[1:])
+
+```
+
+[1]: https://iexcloud.io/
+[2]: https://towardsdatascience.com/how-to-download-all-historic-intraday-ohcl-data-from-iex-with-python-asynchronously-via-api-b5b04a31b187
+[3]: https://towardsdatascience.com/
+[4]: https://www.backtrader.com/
